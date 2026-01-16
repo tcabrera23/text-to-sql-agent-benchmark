@@ -1,0 +1,9 @@
+streamlit
+groq
+pandas
+httpx
+python-dotenv
+openai
+matplotlib
+seaborn
+plotly
