@@ -106,14 +106,17 @@ def render_arena_tab(effective_openrouter_key: str, session_id: str):
     # Verificar API key de OpenRouter
     if not effective_openrouter_key:
         st.warning("⚠️ Se requiere una API key de OpenRouter para usar el Arena. Introdúcela en la barra lateral.")
-        st.info("El Arena te permite comparar 5 modelos diferentes de OpenRouter en las mismas tareas SQL para encontrar el equilibrio perfecto entre precio y calidad.")
+        st.info("El Arena te permite comparar los modelos de OpenRouter (los 5 por defecto, más los que quieras agregar) en las mismas tareas SQL para encontrar el equilibrio perfecto entre precio y calidad.")
         return
+
+    # Modelos por defecto + los que el usuario haya agregado en esta sesión
+    models = {**ARENA_MODELS, **st.session_state.custom_arena_models}
 
     # Panel de información de modelos
     st.subheader("🤖 Modelos en Competencia")
 
-    cols = st.columns(5)
-    for idx, (model_key, model_config) in enumerate(ARENA_MODELS.items()):
+    cols = st.columns(len(models))
+    for idx, (model_key, model_config) in enumerate(models.items()):
         with cols[idx]:
             st.markdown(f"""
             <div style='background-color: {model_config['color']}20; padding: 15px; border-radius: 10px; border-left: 4px solid {model_config['color']}'>
@@ -148,6 +151,51 @@ def render_arena_tab(effective_openrouter_key: str, session_id: str):
             with rec_col1 if idx % 2 == 0 else rec_col2:
                 st.markdown(f"**{use_case.replace('_', ' ').title()}**")
                 st.info(f"✅ {rec['modelo_recomendado']}\n\n{rec['razon']}")
+
+    st.markdown("---")
+
+    # Agregar un modelo personalizado de OpenRouter a la comparación
+    with st.expander("➕ Agregar modelo personalizado (vía OpenRouter)"):
+        st.caption(
+            "Cualquier modelo disponible en OpenRouter puede sumarse a esta comparación "
+            "usando su slug (formato `proveedor/modelo`) y un precio manual, ya que estos "
+            "modelos no están en la tabla de precios conocida de la app."
+        )
+        # Se usa st.form para que completar un campo no dispare un rerun que
+        # colapse el expander antes de llegar al botón de "Agregar".
+        with st.form("add_custom_arena_model", clear_on_submit=True):
+            col_slug, col_prices = st.columns([2, 1])
+            with col_slug:
+                custom_slug = st.text_input("Slug de OpenRouter", placeholder="proveedor/modelo", key="custom_model_slug")
+                custom_display_name = st.text_input("Nombre a mostrar (opcional)", key="custom_model_display_name")
+            with col_prices:
+                custom_price_input = st.number_input("Precio input ($/M tokens)", min_value=0.0, step=0.01, format="%.4f", key="custom_model_price_input")
+                custom_price_output = st.number_input("Precio output ($/M tokens)", min_value=0.0, step=0.01, format="%.4f", key="custom_model_price_output")
+            submitted = st.form_submit_button("Agregar a la comparación")
+
+        if submitted:
+            if not custom_slug or "/" not in custom_slug:
+                st.warning("Introduce un slug válido de OpenRouter, con formato `proveedor/modelo`.")
+            else:
+                st.session_state.custom_arena_models[custom_slug] = {
+                    "name": custom_slug,
+                    "display_name": custom_display_name or custom_slug,
+                    "category": "Personalizado",
+                    "color": "#64748b",
+                    "description": "Modelo agregado manualmente desde la UI.",
+                    "pricing": {"input": custom_price_input, "output": custom_price_output}
+                }
+                st.success(f"'{custom_slug}' se sumó a la comparación de esta sesión.")
+                st.rerun()
+
+        if st.session_state.custom_arena_models:
+            st.markdown("**Modelos personalizados en esta sesión:**")
+            for slug, cfg in list(st.session_state.custom_arena_models.items()):
+                col_name, col_remove = st.columns([5, 1])
+                col_name.text(f"{cfg['display_name']} ({slug}) — ${cfg['pricing']['input']}/${cfg['pricing']['output']} por M tokens (in/out)")
+                if col_remove.button("🗑️", key=f"remove_custom_{slug}"):
+                    del st.session_state.custom_arena_models[slug]
+                    st.rerun()
 
     st.markdown("---")
 
@@ -188,7 +236,7 @@ def render_arena_tab(effective_openrouter_key: str, session_id: str):
             # Botón para ejecutar
             if st.button("🚀 Ejecutar Test en los 5 Modelos", type="primary", use_container_width=True):
                 with st.spinner("Ejecutando test en todos los modelos..."):
-                    arena_results = run_arena_test(selected_test, effective_openrouter_key, session_id)
+                    arena_results = run_arena_test(selected_test, effective_openrouter_key, session_id, models=models)
                     st.session_state.arena_results = arena_results
                 st.success("✅ Test completado!")
                 st.rerun()

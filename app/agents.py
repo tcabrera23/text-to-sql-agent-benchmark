@@ -306,18 +306,25 @@ def run_dashboard_agent(user_prompt: str, llm_client, model_name: str, session_i
 
     st.rerun()
 
-def run_arena_test(test: dict, openrouter_api_key: str, session_id: str):
+def run_arena_test(test: dict, openrouter_api_key: str, session_id: str, models: dict = None):
     """
-    Ejecuta un test del arena contra los 5 modelos y recopila métricas.
+    Ejecuta un test del arena contra un conjunto de modelos y recopila métricas.
 
     Args:
         test: Diccionario con la información del test
         openrouter_api_key: API key de OpenRouter
         session_id: ID de la sesión actual, para el registro de métricas
+        models: diccionario de modelos a comparar (mismo formato que
+            core.models.ARENA_MODELS, con una clave opcional "pricing"
+            para modelos sin precio registrado en core.metrics.MODEL_PRICING).
+            Por defecto usa ARENA_MODELS.
 
     Returns:
         Lista de resultados por modelo
     """
+    if models is None:
+        models = ARENA_MODELS
+
     if not openrouter_api_key:
         st.error("Se requiere una API key de OpenRouter para usar el Arena.")
         return []
@@ -341,7 +348,7 @@ Responde SOLO con el SQL.
     progress_bar = st.progress(0)
     status_text = st.empty()
 
-    for idx, (model_key, model_config) in enumerate(ARENA_MODELS.items()):
+    for idx, (model_key, model_config) in enumerate(models.items()):
         status_text.text(f"Ejecutando en {model_config['display_name']}...")
 
         start_time = time.time()
@@ -426,11 +433,15 @@ Responde SOLO con el SQL.
             result["ttft"] = ttft
             result["latency_api"] = latency_api
 
-            # Calcular costo y eficiencia
+            # Calcular costo y eficiencia (los modelos agregados a mano desde
+            # la UI traen su propio precio en "pricing"; para el resto, se usa
+            # la tabla de precios conocida en core/metrics.py)
+            price_override = model_config.get("pricing")
             result["cost"] = calculate_cost(
                 model_config["name"],
                 result["tokens_input"],
-                result["tokens_output"]
+                result["tokens_output"],
+                price_override=price_override
             )
             result["efficiency"] = calculate_efficiency(
                 result["tokens_total"],
@@ -451,7 +462,8 @@ Responde SOLO con el SQL.
                 success=result["success"],
                 ttft=ttft,
                 test_id=test["id"],
-                test_level=test["level"]
+                test_level=test["level"],
+                price_override=price_override
             )
 
         except Exception as e:
@@ -460,7 +472,7 @@ Responde SOLO con el SQL.
             result["execution_time"] = time.time() - start_time
 
         results.append(result)
-        progress_bar.progress((idx + 1) / len(ARENA_MODELS))
+        progress_bar.progress((idx + 1) / len(models))
         time.sleep(0.3)  # Evitar rate limiting
 
     status_text.text("✅ Test completado!")

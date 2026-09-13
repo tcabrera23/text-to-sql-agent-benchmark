@@ -23,7 +23,7 @@ MODEL_PRICING = {
     "mistralai/mistral-large": {"input": 2.00, "output": 6.00},
 }
 
-def calculate_cost(model_name: str, tokens_input: int, tokens_output: int) -> float:
+def calculate_cost(model_name: str, tokens_input: int, tokens_output: int, price_override: dict = None) -> float:
     """
     Calcula el costo real basado en tokens de entrada y salida.
 
@@ -31,11 +31,14 @@ def calculate_cost(model_name: str, tokens_input: int, tokens_output: int) -> fl
         model_name: Nombre del modelo
         tokens_input: Tokens de entrada
         tokens_output: Tokens de salida
+        price_override: precio manual {"input": $/M tok, "output": $/M tok},
+            usado para modelos que no están en MODEL_PRICING (ej. agregados
+            a mano desde la UI del Arena)
 
     Returns:
         Costo en USD
     """
-    pricing = MODEL_PRICING.get(model_name, {"input": 0.0, "output": 0.0})
+    pricing = price_override or MODEL_PRICING.get(model_name, {"input": 0.0, "output": 0.0})
     cost_input = (tokens_input / 1_000_000) * pricing["input"]
     cost_output = (tokens_output / 1_000_000) * pricing["output"]
     return cost_input + cost_output
@@ -57,7 +60,7 @@ def calculate_efficiency(tokens_processed: int, execution_time: float) -> float:
 
 def log_metrics(session_id, tokens_input, tokens_output, tokens_processed, message_count,
                 api_key_source, llm_model, latency_api, execution_time,
-                success=None, ttft=None, test_id=None, test_level=None):
+                success=None, ttft=None, test_id=None, test_level=None, price_override=None):
     """
     Registra las métricas de uso en un archivo CSV.
 
@@ -75,12 +78,14 @@ def log_metrics(session_id, tokens_input, tokens_output, tokens_processed, messa
         ttft (float, optional): Time to first token en segundos.
         test_id (str, optional): ID del test ejecutado (para arena).
         test_level (str, optional): Nivel de dificultad del test (para arena).
+        price_override (dict, optional): precio manual para calculate_cost,
+            para modelos que no están en MODEL_PRICING.
     """
     file_path = METRICS_CSV_PATH
     file_exists = file_path.exists()
 
     # Calcular métricas derivadas
-    real_cost = calculate_cost(llm_model, tokens_input, tokens_output)
+    real_cost = calculate_cost(llm_model, tokens_input, tokens_output, price_override=price_override)
     efficiency = calculate_efficiency(tokens_processed, execution_time)
 
     try:

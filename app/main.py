@@ -62,6 +62,8 @@ if 'chat_history' not in st.session_state:
     st.session_state.chat_history = []
 if 'arena_results' not in st.session_state:
     st.session_state.arena_results = []
+if 'custom_arena_models' not in st.session_state:
+    st.session_state.custom_arena_models = {}
 
 session_id = st.session_state.session_id
 

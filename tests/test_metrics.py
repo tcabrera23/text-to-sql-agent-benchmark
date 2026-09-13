@@ -20,6 +20,32 @@ def test_calculate_cost_unknown_model_defaults_to_zero():
     assert cost == 0.0
 
 
+def test_calculate_cost_price_override_ignores_pricing_table():
+    # Modelo agregado a mano desde la UI del Arena: no está en MODEL_PRICING,
+    # así que debe usar el precio manual en vez de devolver 0.
+    cost = calculate_cost(
+        "custom/unlisted-model",
+        tokens_input=1_000_000,
+        tokens_output=1_000_000,
+        price_override={"input": 1.0, "output": 2.0},
+    )
+
+    assert cost == 3.0
+
+
+def test_calculate_cost_price_override_wins_over_known_model():
+    # Si se pasa price_override, tiene prioridad incluso para un modelo que
+    # sí figura en MODEL_PRICING.
+    cost = calculate_cost(
+        "openai/gpt-4o",
+        tokens_input=1_000_000,
+        tokens_output=1_000_000,
+        price_override={"input": 0.0, "output": 0.0},
+    )
+
+    assert cost == 0.0
+
+
 def test_calculate_efficiency_tokens_per_second():
     efficiency = calculate_efficiency(tokens_processed=200, execution_time=2.0)
 
