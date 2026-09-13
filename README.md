@@ -42,6 +42,61 @@ Sistema completo de análisis de datos con IA que incluye:
 
 Documentación detallada del Arena: [`benchmark/README.md`](benchmark/README.md)
 
+## 🔄 Flujo de la Aplicación
+
+Las 3 pestañas interactivas (Chat, Dashboard, Arena LLM) siguen el mismo patrón: el LLM elegido recibe el esquema de la base de datos y decide qué SQL ejecutar mediante *tool calling*; toda ejecución de SQL pasa por el mismo punto único (`core/database.py`), que solo permite `SELECT`/`WITH` contra `data/chinook.db`. Las otras 2 pestañas (Resultados Arena, Métricas) son de solo lectura sobre los artefactos generados en `data/`.
+
+```mermaid
+flowchart TD
+    U(("🧑 Usuario")) --> SB["Sidebar:<br/>elige proveedor LLM<br/>+ API key"]
+    SB --> APP
+
+    subgraph APP["app/ (Streamlit: main.py + tabs.py)"]
+        T1["💬 Chat de Análisis"]
+        T2["📊 Dashboard Interactivo"]
+        T3["🏟️ Arena LLM"]
+        T4["📊 Resultados Arena"]
+        T5["📈 Métricas"]
+    end
+
+    T1 --> A1["run_chat_agent()"]
+    T2 --> A2["run_dashboard_agent()"]
+    T3 --> A3["run_arena_test()"]
+
+    A1 --> LLM1["LLM elegido<br/>(Groq / OpenAI / OpenRouter)"]
+    A2 --> LLM1
+    A3 --> LLM5["5 modelos de OpenRouter<br/>core/models.py"]
+
+    LLM1 -->|"tool call: consulta_sql /<br/>add_kpi / add_chart"| SQL
+    LLM5 -->|"SQL generado"| SQL
+
+    subgraph CORE["core/ — lógica compartida"]
+        SQL["database.py<br/>execute_sql()<br/>(solo SELECT / WITH)"]
+        SCHEMA["schema.py + models.py<br/>(prompts del sistema)"]
+        MET["metrics.py<br/>log_metrics() / calculate_cost()"]
+    end
+
+    SCHEMA -.-> LLM1
+    SCHEMA -.-> LLM5
+
+    SQL --> DB[("data/chinook.db")]
+
+    A1 --> MET
+    A2 --> MET
+    A3 --> MET
+    A3 --> VAL["benchmark/catalog.py<br/>validate_result()"]
+
+    MET --> CSVF[("data/metrics.csv")]
+    T5 -.->|"lee"| CSVF
+    T4 -.->|"lee"| JSONF[("data/arena_results.json")]
+
+    CLI["benchmark/runner.py<br/>(CLI, fuera de Streamlit)"] --> LLM5
+    CLI --> JSONF
+    CLI --> VAL
+```
+
+**Cómo leerlo:** las flechas sólidas son el camino de una petición (usuario → agente → LLM → SQL → base de datos); las punteadas son lecturas de referencia (el esquema que se inyecta en los prompts, o los archivos de `data/` que las pestañas de solo-lectura consultan). El CLI de `benchmark/runner.py` corre por fuera de Streamlit pero reutiliza exactamente los mismos módulos de `core/`.
+
 ## 📦 Instalación
 
 ### Requisitos Previos
@@ -219,7 +274,9 @@ El sistema registra automáticamente en `data/metrics.csv`:
 text-to-sql-agent-benchmark/
 │
 ├── app/                         # Aplicación Streamlit
-│   ├── main.py                  # Entrypoint: sidebar, agentes, pestañas
+│   ├── main.py                  # Entrypoint: config, sidebar, wiring de pestañas
+│   ├── agents.py                 # Prompts, tools y lógica de los agentes LLM
+│   ├── tabs.py                   # Renderizado de las 5 pestañas de la UI
 │   └── pricing.py                # Tabla de precios/costos para la UI
 │
 ├── benchmark/                    # Arena: comparación de modelos LLM en SQL
