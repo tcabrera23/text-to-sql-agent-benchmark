@@ -21,13 +21,13 @@ Sistema completo de análisis de datos con IA que incluye:
 - Diseño adaptativo y profesional
 - Actualización dinámica de componentes
 
-### 🆕 LLM Arena (Nuevo!)
+### LLM Arena
 - **5 Modelos en competencia:**
   - 🏋️ GPT-4o (Pesado) - El estándar de oro
-  - 💪 DeepSeek-V3-70b (Mediano) - El retador de código
-  - ⚡ GPT-4o-mini (Crossover) - Rápido y preciso
-  - 🚀 Llama-3.3-70b (Ligero) - Rey de la eficiencia
-  - 🐭 Phi-4-mini-4b (Mini) - El underdog sorprendente
+  - 💪 GPT-OSS-120B (Mediano) - El retador de los gigantes de la IA
+  - ⚡ Llama-3.3-70B (Crossover) - El modelo abierto de Meta
+  - 🚀 Llama-3-8B (Ligero) - Rey de la eficiencia
+  - 🐭 Phi-3.5 (Mini) - El underdog sorprendente
 
 - **15 Tests Profesionales:**
   - 5 tests Nivel 1 (Fácil) - Queries simples
@@ -40,10 +40,12 @@ Sistema completo de análisis de datos con IA que incluye:
   - 💰 Costo real calculado
   - 🚀 Eficiencia (tokens/seg)
 
+Documentación detallada del Arena: [`benchmark/README.md`](benchmark/README.md)
+
 ## 📦 Instalación
 
 ### Requisitos Previos
-- Python 3.8+
+- Python 3.10+
 - pip
 
 ### Pasos de Instalación
@@ -51,7 +53,7 @@ Sistema completo de análisis de datos con IA que incluye:
 1. **Clona el repositorio:**
 ```bash
 git clone <tu-repositorio>
-cd agente_sql
+cd text-to-sql-agent-benchmark
 ```
 
 2. **Instala las dependencias:**
@@ -74,7 +76,7 @@ OPENROUTER_API_KEY=tu_api_key_aqui
 ### Opción 1: Interfaz Web (Recomendado)
 
 ```bash
-streamlit run main.py
+streamlit run app/main.py
 ```
 
 La aplicación se abrirá en `http://localhost:8501`
@@ -84,39 +86,51 @@ La aplicación se abrirá en `http://localhost:8501`
 1. **💬 Chat de Análisis** - Pregunta sobre tus datos en lenguaje natural
 2. **📊 Dashboard Interactivo** - Crea visualizaciones personalizadas
 3. **🏟️ Arena LLM** - Compara modelos en tareas SQL
-4. **📈 Métricas** - Analiza el uso y rendimiento (PIN: 2406)
+4. **📊 Resultados Arena** - Explora los resultados guardados en `data/arena_results.json`
+5. **📈 Métricas** - Analiza el uso y rendimiento (PIN: 2406)
 
 ### Opción 2: Arena CLI (Para Tests Automatizados)
 
 **Windows:**
 ```bash
-run_arena_example.bat
+benchmark\run_example.bat
 ```
 
 **Linux/Mac:**
 ```bash
-chmod +x run_arena_example.sh
-./run_arena_example.sh
+chmod +x benchmark/run_example.sh
+./benchmark/run_example.sh
 ```
 
-**Manual:**
+**Manual (siempre desde la raíz del repo):**
 ```bash
 # Ejecutar todos los tests
-python arena_runner.py --api-key TU_API_KEY
+python benchmark/runner.py --api-key TU_API_KEY
 
 # Solo tests de Nivel 1
-python arena_runner.py --api-key TU_API_KEY --level 1
+python benchmark/runner.py --api-key TU_API_KEY --level 1
 
-# Comparar modelos específicos
-python arena_runner.py --api-key TU_API_KEY --models pesado mini
+# Comparar modelos específicos (claves: heavyweight, medium, crossover, lightweight, mini)
+python benchmark/runner.py --api-key TU_API_KEY --models heavyweight mini
 
 # Tests específicos
-python arena_runner.py --api-key TU_API_KEY --tests L1_T1 L2_T1 L3_T1
+python benchmark/runner.py --api-key TU_API_KEY --tests L1_T1 L2_T1 L3_T1
 ```
+
+## 🧪 Tests del código (pytest)
+
+Además del benchmark de agentes (que evalúa modelos LLM), el proyecto tiene una suite de pruebas de software para su propia lógica:
+
+```bash
+pip install -r requirements.txt
+pytest
+```
+
+Cubre la ejecución guardada de SQL (`core/database.py`), el cálculo de costos/eficiencia (`core/metrics.py`) y la validación de resultados del benchmark (`benchmark/catalog.py`).
 
 ## 📊 Base de Datos
 
-El proyecto usa la base de datos **Chinook** (tienda de música digital) que incluye:
+El proyecto usa la base de datos **Chinook** (tienda de música digital), ubicada en `data/chinook.db`, que incluye:
 
 - 🎵 Artistas, álbumes, tracks, géneros
 - 👥 Clientes, empleados
@@ -162,26 +176,28 @@ Muéstrame la evolución de ventas mes a mes en 2009
 | Modelo | Input | Output | Costo Típico por Query |
 |--------|-------|--------|------------------------|
 | GPT-4o | $2.50 | $10.00 | $0.00275 |
-| DeepSeek-V3 | $0.27 | $1.10 | $0.000300 |
-| GPT-4o-mini | $0.15 | $0.60 | $0.000165 |
-| Llama-3.3 | $0.59 | $0.79 | $0.000413 |
-| Phi-4 | $0.00 | $0.00 | $0.000000 (Gratis!) |
+| GPT-OSS-120B | $0.20 | $0.20 | $0.000140 |
+| Llama-3.3-70B | $0.59 | $0.79 | $0.000413 |
+| Llama-3-8B | $0.055 | $0.055 | $0.000039 |
+| Phi-3.5 | $0.00 | $0.00 | $0.000000 (Gratis!) |
 
 ### Costos por Escenario
 
 **Startup MVP (1,000 queries/mes):**
 - GPT-4o: $2.75/mes
-- DeepSeek-V3: $0.30/mes
-- Phi-4: $0.00/mes
+- GPT-OSS-120B: $0.14/mes
+- Phi-3.5: $0.00/mes
 
 **Enterprise (1M queries/mes):**
 - GPT-4o: $2,750/mes
-- DeepSeek-V3: $300/mes
-- Phi-4: $0.00/mes
+- GPT-OSS-120B: $140/mes
+- Phi-3.5: $0.00/mes
+
+Ver el detalle completo en [`app/pricing.py`](app/pricing.py).
 
 ## 📈 Métricas Trackeadas
 
-El sistema registra automáticamente:
+El sistema registra automáticamente en `data/metrics.csv`:
 
 ### Métricas Básicas
 - Tokens de entrada/salida/total
@@ -200,32 +216,48 @@ El sistema registra automáticamente:
 ## 🛠️ Estructura del Proyecto
 
 ```
-agente_sql/
+text-to-sql-agent-benchmark/
 │
-├── main.py                     # Aplicación principal (Streamlit)
-├── metrics.py                  # Sistema de métricas y logging
-├── arena_tests.py              # Definición de 15 tests del Arena
-├── arena_runner.py             # CLI para ejecución automatizada
-├── model_pricing_table.py      # Tabla de precios y análisis
+├── app/                         # Aplicación Streamlit
+│   ├── main.py                  # Entrypoint: sidebar, agentes, pestañas
+│   └── pricing.py                # Tabla de precios/costos para la UI
 │
-├── chinook.db                  # Base de datos SQLite
-├── metrics.csv                 # Métricas registradas (auto-generado)
+├── benchmark/                    # Arena: comparación de modelos LLM en SQL
+│   ├── catalog.py                # Definición de los 15 tests + validación
+│   ├── runner.py                 # CLI para ejecución automatizada
+│   ├── run_example.sh            # Script de ejemplo (Linux/Mac)
+│   ├── run_example.bat           # Script de ejemplo (Windows)
+│   └── README.md                 # Documentación detallada del Arena
 │
-├── requirements.txt            # Dependencias Python
-├── .env                        # Variables de entorno (crear manualmente)
+├── core/                          # Lógica compartida (app + benchmark)
+│   ├── paths.py                   # Rutas del proyecto (data/, chinook.db, ...)
+│   ├── schema.py                  # DDL de la base de datos Chinook
+│   ├── models.py                  # Registro de los 5 modelos del Arena
+│   ├── database.py                # Ejecución guardada de SQL (solo SELECT)
+│   └── metrics.py                 # Precios, cálculo de costo/eficiencia y logging
 │
-├── README.md                   # Este archivo
-├── ARENA_README.md             # Documentación detallada del Arena
+├── tests/                          # Pruebas de software (pytest)
+│   ├── test_database.py
+│   ├── test_metrics.py
+│   └── test_catalog.py
 │
-├── run_arena_example.bat       # Script de ejemplo (Windows)
-└── run_arena_example.sh        # Script de ejemplo (Linux/Mac)
+├── data/                            # Datos y artefactos generados
+│   ├── chinook.db                   # Base de datos SQLite
+│   ├── metrics.csv                  # Métricas registradas (auto-generado)
+│   ├── arena_results.json           # Resultados del Arena (generado por CLI)
+│   └── example_arena_output.md      # Ejemplo de salida de una corrida del CLI
+│
+├── requirements.txt              # Dependencias Python
+├── .env                           # Variables de entorno (crear manualmente)
+│
+└── README.md                     # Este archivo
 ```
 
 ## 🔧 Configuración Avanzada
 
 ### Agregar Nuevos Modelos al Arena
 
-1. Edita `main.py` y `arena_runner.py`:
+Edita [`core/models.py`](core/models.py) (fuente única usada por la app y el CLI):
 ```python
 ARENA_MODELS["tu_modelo"] = {
     "name": "proveedor/modelo-id",
@@ -236,7 +268,7 @@ ARENA_MODELS["tu_modelo"] = {
 }
 ```
 
-2. Actualiza precios en `metrics.py`:
+Actualiza precios en [`core/metrics.py`](core/metrics.py):
 ```python
 MODEL_PRICING["proveedor/modelo-id"] = {
     "input": 0.00,
@@ -246,7 +278,7 @@ MODEL_PRICING["proveedor/modelo-id"] = {
 
 ### Crear Tests Personalizados
 
-Edita `arena_tests.py`:
+Edita [`benchmark/catalog.py`](benchmark/catalog.py):
 ```python
 {
     "id": "L2_T6",
@@ -282,16 +314,12 @@ Edita `arena_tests.py`:
 
 - **Groq** - `llama-3.3-70b-versatile`
 - **OpenAI** - `gpt-4o`
-- **OpenRouter** - Acceso a 5+ modelos:
-  - OpenAI (GPT-4o, GPT-4o-mini)
-  - DeepSeek (V3)
-  - Meta (Llama-3.3-70b)
-  - Microsoft (Phi-4)
+- **OpenRouter** - Acceso a los 5 modelos del Arena (ver [`core/models.py`](core/models.py))
 
 ## 🐛 Troubleshooting
 
 **Error: "No se encontró chinook.db"**
-- Asegúrate de que `chinook.db` esté en la misma carpeta que `main.py`
+- Asegúrate de que `data/chinook.db` exista y de correr los comandos desde la raíz del repo
 
 **Error: "API key inválida"**
 - Verifica que tu API key esté activa y tenga créditos
@@ -303,7 +331,7 @@ Edita `arena_tests.py`:
 - Revisa los límites de rate limit de tu API key
 
 **Costos muy altos**
-- Usa modelos más pequeños (Phi-4, DeepSeek-V3)
+- Usa modelos más pequeños (Phi-3.5, Llama-3-8B)
 - Limita los tests con `--level 1` o `--models`
 - Monitorea en la pestaña "Métricas"
 
@@ -317,21 +345,21 @@ Este proyecto es de código abierto y está disponible bajo la licencia MIT.
 - **Streamlit** - Framework de interfaz web
 - **OpenRouter** - Acceso unificado a múltiples LLMs
 - **Groq** - Inferencia rápida de LLMs
-- **OpenAI** - GPT-4o y GPT-4o-mini
+- **OpenAI** - GPT-4o
 
 ## 📞 Soporte
 
 Para preguntas o problemas:
-1. Revisa la documentación en `ARENA_README.md`
-2. Verifica los logs en `metrics.csv`
-3. Consulta los ejemplos en los scripts de ejecución
+1. Revisa la documentación en [`benchmark/README.md`](benchmark/README.md)
+2. Verifica los logs en `data/metrics.csv`
+3. Consulta los ejemplos en los scripts de `benchmark/`
 
 ---
 
-**¿Ansioso por ver si los modelos pequeños compiten con los grandes?** 
+**¿Ansioso por ver si los modelos pequeños compiten con los grandes?**
 
 ¡Ejecuta el Arena y descúbrelo! 🏆
 
 ```bash
-streamlit run main.py
+streamlit run app/main.py
 ```

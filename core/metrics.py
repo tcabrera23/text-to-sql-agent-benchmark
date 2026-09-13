@@ -1,6 +1,7 @@
-import os
 import csv
 from datetime import datetime
+
+from core.paths import METRICS_CSV_PATH
 
 # Precios por millón de tokens para OpenRouter (USD) - Actualizado 2026
 MODEL_PRICING = {
@@ -11,7 +12,7 @@ MODEL_PRICING = {
     "meta-llama/llama-3-8b-instruct": {"input": 0.055, "output": 0.055},  # Ligero - Rey de la eficiencia
     "microsoft/phi-3.5-mini-128k-instruct": {"input": 0.00, "output": 0.00},  # Mini - El "underdog" que sorprende (GRATIS)
     "microsoft/phi-4": {"input": 0.00, "output": 0.00},  # Alternativa (si se usa)
-    
+
     # Modelos adicionales compatibles
     "deepseek/deepseek-v3": {"input": 0.27, "output": 1.10},
     "openai/gpt-4o-mini": {"input": 0.15, "output": 0.60},
@@ -25,12 +26,12 @@ MODEL_PRICING = {
 def calculate_cost(model_name: str, tokens_input: int, tokens_output: int) -> float:
     """
     Calcula el costo real basado en tokens de entrada y salida.
-    
+
     Args:
         model_name: Nombre del modelo
         tokens_input: Tokens de entrada
         tokens_output: Tokens de salida
-        
+
     Returns:
         Costo en USD
     """
@@ -42,11 +43,11 @@ def calculate_cost(model_name: str, tokens_input: int, tokens_output: int) -> fl
 def calculate_efficiency(tokens_processed: int, execution_time: float) -> float:
     """
     Calcula la eficiencia en tokens por segundo.
-    
+
     Args:
         tokens_processed: Total de tokens procesados
         execution_time: Tiempo de ejecución en segundos
-        
+
     Returns:
         Tokens por segundo
     """
@@ -54,8 +55,8 @@ def calculate_efficiency(tokens_processed: int, execution_time: float) -> float:
         return 0.0
     return tokens_processed / execution_time
 
-def log_metrics(session_id, tokens_input, tokens_output, tokens_processed, message_count, 
-                api_key_source, llm_model, latency_api, execution_time, 
+def log_metrics(session_id, tokens_input, tokens_output, tokens_processed, message_count,
+                api_key_source, llm_model, latency_api, execution_time,
                 success=None, ttft=None, test_id=None, test_level=None):
     """
     Registra las métricas de uso en un archivo CSV.
@@ -75,16 +76,16 @@ def log_metrics(session_id, tokens_input, tokens_output, tokens_processed, messa
         test_id (str, optional): ID del test ejecutado (para arena).
         test_level (str, optional): Nivel de dificultad del test (para arena).
     """
-    file_path = "metrics.csv"
-    file_exists = os.path.exists(file_path)
-    
+    file_path = METRICS_CSV_PATH
+    file_exists = file_path.exists()
+
     # Calcular métricas derivadas
     real_cost = calculate_cost(llm_model, tokens_input, tokens_output)
     efficiency = calculate_efficiency(tokens_processed, execution_time)
 
     try:
         with open(file_path, 'a', newline='', encoding='utf-8') as csvfile:
-            fieldnames = ['date', 'session_id', 'tokens_input', 'tokens_output', 'tokens_processed', 
+            fieldnames = ['date', 'session_id', 'tokens_input', 'tokens_output', 'tokens_processed',
                          'message_count', 'api_key_source', 'llm_model', 'latency_api', 'execution_time',
                          'success', 'ttft', 'real_cost', 'efficiency', 'test_id', 'test_level']
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)

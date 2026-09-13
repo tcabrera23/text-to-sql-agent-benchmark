@@ -1,5 +1,5 @@
 """
-Tests para el LLM Arena - Comparación de Modelos en Tareas SQL
+Catálogo de tests para el LLM Arena - Comparación de Modelos en Tareas SQL
 Basado en la base de datos Chinook (tienda de música)
 
 Estructura:
@@ -80,7 +80,7 @@ ARENA_TESTS = [
             "column_types": ["numeric", "numeric"]
         }
     },
-    
+
     # ==================== NIVEL 2: MEDIO ====================
     {
         "id": "L2_T1",
@@ -146,7 +146,7 @@ ARENA_TESTS = [
             "column_types": ["string", "numeric", "numeric"]
         }
     },
-    
+
     # ==================== NIVEL 3: DIFÍCIL ====================
     {
         "id": "L3_T1",
@@ -228,42 +228,42 @@ def get_test_by_id(test_id: str):
 def validate_result(test_id: str, df, error: str = None) -> dict:
     """
     Valida si el resultado de una consulta cumple con las reglas esperadas.
-    
+
     Returns:
         dict: {"success": bool, "message": str, "details": dict}
     """
     test = get_test_by_id(test_id)
     if not test:
         return {"success": False, "message": "Test no encontrado", "details": {}}
-    
+
     # Si hubo error en la ejecución
     if error:
         return {"success": False, "message": f"Error en ejecución: {error}", "details": {}}
-    
+
     validation_rules = test.get("validation_rules", {})
     details = {}
-    
+
     # Validar número de filas
     if "min_rows" in validation_rules:
         if len(df) < validation_rules["min_rows"]:
             return {"success": False, "message": f"Se esperaban al menos {validation_rules['min_rows']} filas, se obtuvieron {len(df)}", "details": details}
-    
+
     if "max_rows" in validation_rules:
         if len(df) > validation_rules["max_rows"]:
             return {"success": False, "message": f"Se esperaban máximo {validation_rules['max_rows']} filas, se obtuvieron {len(df)}", "details": details}
-    
+
     # Validar número de columnas
     if "required_columns" in validation_rules:
         if len(df.columns) != validation_rules["required_columns"]:
             return {"success": False, "message": f"Se esperaban {validation_rules['required_columns']} columnas, se obtuvieron {len(df.columns)}", "details": details}
-    
+
     # Validar que no esté vacío
     if df.empty:
         return {"success": False, "message": "El resultado está vacío", "details": details}
-    
+
     details["rows_returned"] = len(df)
     details["columns_returned"] = len(df.columns)
-    
+
     return {"success": True, "message": "Validación exitosa", "details": details}
 
 # Estadísticas de los tests

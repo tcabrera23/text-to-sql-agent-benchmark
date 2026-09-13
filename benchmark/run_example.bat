@@ -1,6 +1,7 @@
 @echo off
 REM Script de ejemplo para ejecutar el Arena Runner en Windows
-REM Asegúrate de tener tu API key de OpenRouter
+REM Asegurate de tener tu API key de OpenRouter
+REM Ejecutar desde la raiz del repo: benchmark\run_example.bat
 
 echo ================================================================================
 echo                       LLM ARENA - SCRIPT DE EJEMPLO
@@ -48,37 +49,37 @@ set /p OPCION="Selecciona una opcion (1-7): "
 if "%OPCION%"=="1" (
     echo.
     echo Ejecutando TODOS los tests...
-    python arena_runner.py --api-key %OPENROUTER_API_KEY% --output arena_full_results.json
+    python benchmark\runner.py --api-key %OPENROUTER_API_KEY% --output data\arena_full_results.json
 )
 
 if "%OPCION%"=="2" (
     echo.
     echo Ejecutando tests de Nivel 1...
-    python arena_runner.py --api-key %OPENROUTER_API_KEY% --level 1 --output arena_level1.json
+    python benchmark\runner.py --api-key %OPENROUTER_API_KEY% --level 1 --output data\arena_level1.json
 )
 
 if "%OPCION%"=="3" (
     echo.
     echo Ejecutando tests de Nivel 2...
-    python arena_runner.py --api-key %OPENROUTER_API_KEY% --level 2 --output arena_level2.json
+    python benchmark\runner.py --api-key %OPENROUTER_API_KEY% --level 2 --output data\arena_level2.json
 )
 
 if "%OPCION%"=="4" (
     echo.
     echo Ejecutando tests de Nivel 3...
-    python arena_runner.py --api-key %OPENROUTER_API_KEY% --level 3 --output arena_level3.json
+    python benchmark\runner.py --api-key %OPENROUTER_API_KEY% --level 3 --output data\arena_level3.json
 )
 
 if "%OPCION%"=="5" (
     echo.
     echo Comparando modelos pequenos en Nivel 1...
-    python arena_runner.py --api-key %OPENROUTER_API_KEY% --level 1 --models mini ligero --output arena_small_models.json
+    python benchmark\runner.py --api-key %OPENROUTER_API_KEY% --level 1 --models mini lightweight --output data\arena_small_models.json
 )
 
 if "%OPCION%"=="6" (
     echo.
     echo Benchmark completo de GPT-4o...
-    python arena_runner.py --api-key %OPENROUTER_API_KEY% --models pesado --output arena_gpt4o.json
+    python benchmark\runner.py --api-key %OPENROUTER_API_KEY% --models heavyweight --output data\arena_gpt4o.json
 )
 
 if "%OPCION%"=="7" (

@@ -1,6 +1,7 @@
 #!/bin/bash
 # Script de ejemplo para ejecutar el Arena Runner en Linux/Mac
 # Asegúrate de tener tu API key de OpenRouter
+# Ejecutar desde la raíz del repo: ./benchmark/run_example.sh
 
 echo "================================================================================"
 echo "                       LLM ARENA - SCRIPT DE EJEMPLO"
@@ -46,32 +47,32 @@ case $OPCION in
     1)
         echo ""
         echo "Ejecutando TODOS los tests..."
-        python3 arena_runner.py --api-key $OPENROUTER_API_KEY --output arena_full_results.json
+        python3 benchmark/runner.py --api-key $OPENROUTER_API_KEY --output data/arena_full_results.json
         ;;
     2)
         echo ""
         echo "Ejecutando tests de Nivel 1..."
-        python3 arena_runner.py --api-key $OPENROUTER_API_KEY --level 1 --output arena_level1.json
+        python3 benchmark/runner.py --api-key $OPENROUTER_API_KEY --level 1 --output data/arena_level1.json
         ;;
     3)
         echo ""
         echo "Ejecutando tests de Nivel 2..."
-        python3 arena_runner.py --api-key $OPENROUTER_API_KEY --level 2 --output arena_level2.json
+        python3 benchmark/runner.py --api-key $OPENROUTER_API_KEY --level 2 --output data/arena_level2.json
         ;;
     4)
         echo ""
         echo "Ejecutando tests de Nivel 3..."
-        python3 arena_runner.py --api-key $OPENROUTER_API_KEY --level 3 --output arena_level3.json
+        python3 benchmark/runner.py --api-key $OPENROUTER_API_KEY --level 3 --output data/arena_level3.json
         ;;
     5)
         echo ""
         echo "Comparando modelos pequeños en Nivel 1..."
-        python3 arena_runner.py --api-key $OPENROUTER_API_KEY --level 1 --models mini ligero --output arena_small_models.json
+        python3 benchmark/runner.py --api-key $OPENROUTER_API_KEY --level 1 --models mini lightweight --output data/arena_small_models.json
         ;;
     6)
         echo ""
         echo "Benchmark completo de GPT-4o..."
-        python3 arena_runner.py --api-key $OPENROUTER_API_KEY --models pesado --output arena_gpt4o.json
+        python3 benchmark/runner.py --api-key $OPENROUTER_API_KEY --models heavyweight --output data/arena_gpt4o.json
         ;;
     7)
         echo ""

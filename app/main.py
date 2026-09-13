@@ -1,3 +1,10 @@
+import sys
+from pathlib import Path
+
+# Permite importar core/, app/ y benchmark/ como paquetes de nivel de repo, ya que
+# `streamlit run app/main.py` solo agrega al sys.path la carpeta de este script,
+# no la raíz del proyecto.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import streamlit as st
 import json
@@ -9,11 +16,15 @@ import uuid
 import matplotlib.pyplot as plt
 import seaborn as sns
 import plotly.express as px
-from metrics import log_metrics, calculate_cost, calculate_efficiency
-import sqlite3
 import time
-from arena_tests import ARENA_TESTS, get_tests_by_level, validate_result, TEST_STATS
-from model_pricing_table import PRICING_TABLE, COST_ANALYSIS, RECOMMENDATIONS
+
+from core.database import execute_sql
+from core.metrics import log_metrics, calculate_cost, calculate_efficiency
+from core.models import ARENA_MODELS
+from core.schema import CHINOOK_SCHEMA_DDL
+from core.paths import ARENA_RESULTS_PATH, METRICS_CSV_PATH
+from benchmark.catalog import ARENA_TESTS, get_tests_by_level, validate_result, TEST_STATS
+from app.pricing import PRICING_TABLE, COST_ANALYSIS, RECOMMENDATIONS
 
 # Imports opcionales de LLM providers con manejo de errores
 try:
@@ -47,9 +58,6 @@ st.set_page_config(
 
 # --- 2. INICIALIZACIÓN DE CLIENTES Y ESTADO DE LA SESIÓN ---
 
-# Ruta a la base de datos SQLite
-DB_PATH = os.path.join(os.path.dirname(__file__), "chinook.db")
-
 # Inicializar estado de la sesión
 if 'session_id' not in st.session_state:
     st.session_state['session_id'] = str(uuid.uuid4())
@@ -69,45 +77,6 @@ if 'arena_results' not in st.session_state:
     st.session_state.arena_results = []
 
 session_id = st.session_state.session_id
-
-# --- CONFIGURACIÓN DEL ARENA (5 Modelos) ---
-ARENA_MODELS = {
-    "heavyweight": {
-        "name": "openai/gpt-4o",
-        "display_name": "GPT-4o (Pesado)",
-        "category": "Pesado",
-        "color": "#10a37f",
-        "description": "El estándar de oro. 'El que no debería fallar'."
-    },
-    "medium": {
-        "name": "openai/gpt-oss-120b",
-        "display_name": "GPT-OSS-120B (Mediano)",
-        "category": "Mediano",
-        "color": "#2563eb",
-        "description": "El retador de los gigantes de la IA."
-    },
-    "crossover": {
-        "name": "meta-llama/llama-3.3-70b-instruct",
-        "display_name": "Llama-3.3-70B (Crossover)",
-        "category": "Crossover",
-        "color": "#f59e0b",
-        "description": "El modelo 'abierto' de Meta (estilo OT-preview)."
-    },
-    "lightweight": {
-        "name": "meta-llama/llama-3-8b-instruct",
-        "display_name": "Llama-3-8B (Ligero)",
-        "category": "Ligero",
-        "color": "#8b5cf6",
-        "description": "El rey de la eficiencia."
-    },
-    "mini": {
-        "name": "microsoft/phi-3.5-mini-128k-instruct",
-        "display_name": "Phi-3.5 (Mini)",
-        "category": "Mini",
-        "color": "#ec4899",
-        "description": "El 'underdog' que sorprende por su tamaño."
-    }
-}
 
 # --- 3. SIDEBAR DE CONFIGURACIÓN ---
 
@@ -152,7 +121,7 @@ elif selected_provider == "OpenRouter":
         st.session_state.openrouter_api_key = user_openrouter_key
         st.sidebar.success("API Key de OpenRouter actualizada.")
         st.rerun()
-    
+
     # Selector de modelo para OpenRouter
     openrouter_model = st.sidebar.selectbox(
         "Selecciona el modelo",
@@ -222,117 +191,6 @@ if not llm_client:
 
 # --- 5. ESQUEMA DE LA BASE DE DATOS Y PROMPTS DEL SISTEMA ---
 
-chinook_schema = """
-CREATE TABLE "artists" (
-    "ArtistId" INTEGER NOT NULL,
-    "Name" NVARCHAR(120),
-    PRIMARY KEY ("ArtistId")
-);
-CREATE TABLE "albums" (
-    "AlbumId" INTEGER NOT NULL,
-    "Title" NVARCHAR(160) NOT NULL,
-    "ArtistId" INTEGER NOT NULL,
-    PRIMARY KEY ("AlbumId"),
-    FOREIGN KEY ("ArtistId") REFERENCES "artists" ("ArtistId")
-);
-CREATE TABLE "employees" (
-    "EmployeeId" INTEGER NOT NULL,
-    "LastName" NVARCHAR(20) NOT NULL,
-    "FirstName" NVARCHAR(20) NOT NULL,
-    "Title" NVARCHAR(30),
-    "ReportsTo" INTEGER,
-    "BirthDate" DATETIME,
-    "HireDate" DATETIME,
-    "Address" NVARCHAR(70),
-    "City" NVARCHAR(40),
-    "State" NVARCHAR(40),
-    "Country" NVARCHAR(40),
-    "PostalCode" NVARCHAR(10),
-    "Phone" NVARCHAR(24),
-    "Fax" NVARCHAR(24),
-    "Email" NVARCHAR(60),
-    PRIMARY KEY ("EmployeeId"),
-    FOREIGN KEY ("ReportsTo") REFERENCES "employees" ("EmployeeId")
-);
-CREATE TABLE "customers" (
-    "CustomerId" INTEGER NOT NULL,
-    "FirstName" NVARCHAR(40) NOT NULL,
-    "LastName" NVARCHAR(20) NOT NULL,
-    "Company" NVARCHAR(80),
-    "Address" NVARCHAR(70),
-    "City" NVARCHAR(40),
-    "State" NVARCHAR(40),
-    "Country" NVARCHAR(40),
-    "PostalCode" NVARCHAR(10),
-    "Phone" NVARCHAR(24),
-    "Fax" NVARCHAR(24),
-    "Email" NVARCHAR(60) NOT NULL,
-    "SupportRepId" INTEGER,
-    PRIMARY KEY ("CustomerId"),
-    FOREIGN KEY ("SupportRepId") REFERENCES "employees" ("EmployeeId")
-);
-CREATE TABLE "invoices" (
-    "InvoiceId" INTEGER NOT NULL,
-    "CustomerId" INTEGER NOT NULL,
-    "InvoiceDate" DATETIME NOT NULL,
-    "BillingAddress" NVARCHAR(70),
-    "BillingCity" NVARCHAR(40),
-    "BillingState" NVARCHAR(40),
-    "BillingCountry" NVARCHAR(40),
-    "BillingPostalCode" NVARCHAR(10),
-    "Total" NUMERIC(10, 2) NOT NULL,
-    PRIMARY KEY ("InvoiceId"),
-    FOREIGN KEY ("CustomerId") REFERENCES "customers" ("CustomerId")
-);
-CREATE TABLE "invoice_items" (
-    "InvoiceLineId" INTEGER NOT NULL,
-    "InvoiceId" INTEGER NOT NULL,
-    "TrackId" INTEGER NOT NULL,
-    "UnitPrice" NUMERIC(10, 2) NOT NULL,
-    "Quantity" INTEGER NOT NULL,
-    PRIMARY KEY ("InvoiceLineId"),
-    FOREIGN KEY ("InvoiceId") REFERENCES "invoices" ("InvoiceId"),
-    FOREIGN KEY ("TrackId") REFERENCES "tracks" ("TrackId")
-);
-CREATE TABLE "media_types" (
-    "MediaTypeId" INTEGER NOT NULL,
-    "Name" NVARCHAR(120),
-    PRIMARY KEY ("MediaTypeId")
-);
-CREATE TABLE "genres" (
-    "GenreId" INTEGER NOT NULL,
-    "Name" NVARCHAR(120),
-    PRIMARY KEY ("GenreId")
-);
-CREATE TABLE "tracks" (
-    "TrackId" INTEGER NOT NULL,
-    "Name" NVARCHAR(200) NOT NULL,
-    "AlbumId" INTEGER,
-    "MediaTypeId" INTEGER NOT NULL,
-    "GenreId" INTEGER,
-    "Composer" NVARCHAR(220),
-    "Milliseconds" INTEGER NOT NULL,
-    "Bytes" INTEGER,
-    "UnitPrice" NUMERIC(10, 2) NOT NULL,
-    PRIMARY KEY ("TrackId"),
-    FOREIGN KEY ("AlbumId") REFERENCES "albums" ("AlbumId"),
-    FOREIGN KEY ("GenreId") REFERENCES "genres" ("GenreId"),
-    FOREIGN KEY ("MediaTypeId") REFERENCES "media_types" ("MediaTypeId")
-);
-CREATE TABLE "playlists" (
-    "PlaylistId" INTEGER NOT NULL,
-    "Name" NVARCHAR(120),
-    PRIMARY KEY ("PlaylistId")
-);
-CREATE TABLE "playlist_track" (
-    "PlaylistId" INTEGER NOT NULL,
-    "TrackId" INTEGER NOT NULL,
-    PRIMARY KEY ("PlaylistId", "TrackId"),
-    FOREIGN KEY ("PlaylistId") REFERENCES "playlists" ("PlaylistId"),
-    FOREIGN KEY ("TrackId") REFERENCES "tracks" ("TrackId")
-);
-"""
-
 # Prompt para el Agente de Chat SQL
 CHAT_AGENT_PROMPT = f'''
 Eres un analista de datos experto en SQL. Tu objetivo es responder a las preguntas del usuario sobre la base de datos.
@@ -349,17 +207,17 @@ Un buen análisis de negocio implica investigar varias áreas clave. Deberías c
 6. Los nombres de tablas y columnas usan PascalCase (ej: "artists", "ArtistId"). Respeta las mayúsculas.
 7. Si la consulta no devuelve resultados, informa amablemente al usuario.
 
-Alcance: 
+Alcance:
 - Solo puedes usar consultas SELECT.
-- Solo hablas respecto a la base de datos proporcionada. 
+- Solo hablas respecto a la base de datos proporcionada.
 
 Esquema de la base de datos:
-{chinook_schema}
+{CHINOOK_SCHEMA_DDL}
 '''
 
 # Prompt para el Agente de Dashboard
 DASHBOARD_AGENT_PROMPT = f"""
-Eres un diseñador experto de dashboards de Business Intelligence. Tu objetivo es crear un dashboard claro y profesional basado en las peticiones del usuario sobre la base de datos. 
+Eres un diseñador experto de dashboards de Business Intelligence. Tu objetivo es crear un dashboard claro y profesional basado en las peticiones del usuario sobre la base de datos.
 Tu proceso:
 1. Analiza la petición del usuario (ej: "Muéstrame las ventas por género y el total de clientes"). Cuando un usuario te haga una pregunta abierta como 'analiza mi negocio' o 'dame un resumen de las ventas', tu tarea es tomar la iniciativa.
 Un buen análisis de negocio implica investigar varias áreas clave. Deberías considerar generar consultas que respondan a preguntas como
@@ -373,7 +231,7 @@ Un buen análisis de negocio implica investigar varias áreas clave. Deberías c
 5. Llama a las herramientas necesarias para construir el dashboard.
 
 Esquema de la Base de Datos:
-{chinook_schema}
+{CHINOOK_SCHEMA_DDL}
 """
 
 # --- 6. DEFINICIÓN DE HERRAMIENTAS (TOOLS) ---
@@ -381,26 +239,16 @@ Esquema de la Base de Datos:
 # Herramienta 1: Consulta SQL (Común para ambos agentes)
 def consulta_sql(sql_query: str):
     """Ejecuta una consulta SQL SELECT y devuelve un DataFrame y un JSON."""
-    try:
-        sql_query = sql_query.strip().rstrip(';')
-        
-        # Verificar que la consulta sea solo SELECT o WITH (CTEs)
-        sql_upper = sql_query.upper()
-        if not (sql_upper.startswith('SELECT') or sql_upper.startswith('WITH')):
-            return pd.DataFrame(), None, "Solo se permiten consultas SELECT."
-        
-        # Conectar a la base de datos SQLite
-        conn = sqlite3.connect(DB_PATH)
-        df = pd.read_sql_query(sql_query, conn)
-        conn.close()
-        
-        if df.empty:
-            return pd.DataFrame(), json.dumps([{"message": "No se encontraron resultados."}]), "Consulta exitosa, pero sin resultados."
-        
-        json_output = df.to_json(orient='records', date_format='iso')
-        return df, json_output, None
-    except Exception as e:
-        return pd.DataFrame(), None, f"Error al ejecutar la consulta: {e}"
+    df, error = execute_sql(sql_query)
+
+    if error:
+        return pd.DataFrame(), None, error
+
+    if df.empty:
+        return pd.DataFrame(), json.dumps([{"message": "No se encontraron resultados."}]), "Consulta exitosa, pero sin resultados."
+
+    json_output = df.to_json(orient='records', date_format='iso')
+    return df, json_output, None
 
 # Herramienta 2: Añadir KPI al Dashboard
 def add_kpi(element_id: str, title: str, sql_query: str):
@@ -459,17 +307,17 @@ def run_chat_agent(prompt: str):
     """Ejecuta el agente de chat SQL."""
     start_time = time.time()
     st.session_state.query_results = []
-    
+
     # Cargar historial desde session_state
     messages = st.session_state.chat_history.copy()
 
     # Contar prompts de usuario
     user_prompts = [m for m in messages if m['role'] == 'user']
-    
+
     # Determinar si se está usando una API key de usuario
     using_user_api_key = bool(
-        st.session_state.get("groq_api_key") or 
-        st.session_state.get("openai_api_key") or 
+        st.session_state.get("groq_api_key") or
+        st.session_state.get("openai_api_key") or
         st.session_state.get("openrouter_api_key")
     )
 
@@ -481,10 +329,10 @@ def run_chat_agent(prompt: str):
     if not using_user_api_key and len(user_prompts) >= 4:
         with st.chat_message("assistant"):
             st.warning("Has alcanzado el límite de 4 interacciones gratuitas. Por favor, introduce tu propia API key en la barra lateral para continuar.")
-        return 
+        return
 
     # Si la verificación pasa, continuar con la lógica del agente
-    
+
     # Añadir mensaje del usuario al historial
     user_message = {"role": "user", "content": prompt}
     messages.append(user_message)
@@ -497,17 +345,17 @@ def run_chat_agent(prompt: str):
             tokens_input = 0
             tokens_output = 0
             total_tokens = 0
-            
+
             try:
                 api_start = time.time()
                 response = llm_client.chat.completions.create(model=model_name, messages=messages_for_api, tools=chat_tools, tool_choice="auto")
                 api_latency = time.time() - api_start
-                
+
                 if response.usage:
                     tokens_input += response.usage.prompt_tokens
                     tokens_output += response.usage.completion_tokens
                     total_tokens += response.usage.total_tokens
-                    
+
                 response_message = response.choices[0].message
                 final_response_content = ""
 
@@ -522,11 +370,11 @@ def run_chat_agent(prompt: str):
                             st.session_state.query_results.append({"sql": sql_query, "df": df, "error": error})
                             tool_output = json.dumps({"error": error}) if error else json_output
                             messages_for_api.append({"role": "tool", "tool_call_id": tool_call.id, "content": tool_output})
-                    
+
                     api_start_2 = time.time()
                     final_response_completion = llm_client.chat.completions.create(model=model_name, messages=messages_for_api)
                     api_latency += time.time() - api_start_2
-                    
+
                     if final_response_completion.usage:
                         tokens_input += final_response_completion.usage.prompt_tokens
                         tokens_output += final_response_completion.usage.completion_tokens
@@ -543,10 +391,10 @@ def run_chat_agent(prompt: str):
             assistant_message = {"role": "assistant", "content": final_response_content}
             messages.append(assistant_message)
             st.session_state.chat_history.append(assistant_message)
-            
+
             # Calcular tiempo total de ejecución
             execution_time = time.time() - start_time
-            
+
             # Log metrics
             api_key_source = "user" if using_user_api_key else "default"
             log_metrics(
@@ -575,17 +423,17 @@ def run_dashboard_agent(user_prompt: str):
         tokens_input = 0
         tokens_output = 0
         total_tokens = 0
-        
+
         try:
             api_start = time.time()
             response = llm_client.chat.completions.create(model=model_name, messages=messages, tools=dashboard_tools, tool_choice="auto")
             api_latency = time.time() - api_start
-            
+
             if response.usage:
                 tokens_input = response.usage.prompt_tokens
                 tokens_output = response.usage.completion_tokens
                 total_tokens = response.usage.total_tokens
-                
+
             response_message = response.choices[0].message
 
             if response_message.tool_calls:
@@ -604,11 +452,11 @@ def run_dashboard_agent(user_prompt: str):
 
         # Calcular tiempo total de ejecución
         execution_time = time.time() - start_time
-        
+
         # Log metrics
         using_user_api_key = bool(
-            st.session_state.get("groq_api_key") or 
-            st.session_state.get("openai_api_key") or 
+            st.session_state.get("groq_api_key") or
+            st.session_state.get("openai_api_key") or
             st.session_state.get("openrouter_api_key")
         )
         api_key_source = "user" if using_user_api_key else "default"
@@ -629,18 +477,18 @@ def run_dashboard_agent(user_prompt: str):
 def run_arena_test(test: dict, openrouter_api_key: str):
     """
     Ejecuta un test del arena contra los 5 modelos y recopila métricas.
-    
+
     Args:
         test: Diccionario con la información del test
         openrouter_api_key: API key de OpenRouter
-    
+
     Returns:
         Lista de resultados por modelo
     """
     if not openrouter_api_key:
         st.error("Se requiere una API key de OpenRouter para usar el Arena.")
         return []
-    
+
     # Prompt del sistema para generación SQL pura
     arena_system_prompt = f"""
 Eres un experto en SQL. Convierte la siguiente pregunta en una consulta SQL SELECT válida para SQLite.
@@ -651,18 +499,18 @@ Reglas:
 3. Los nombres usan PascalCase (ej: "ArtistId", "artists").
 
 Esquema:
-{chinook_schema}
+{CHINOOK_SCHEMA_DDL}
 
 Responde SOLO con el SQL.
 """
-    
+
     results = []
     progress_bar = st.progress(0)
     status_text = st.empty()
-    
+
     for idx, (model_key, model_config) in enumerate(ARENA_MODELS.items()):
         status_text.text(f"Ejecutando en {model_config['display_name']}...")
-        
+
         start_time = time.time()
         result = {
             "test_id": test["id"],
@@ -686,19 +534,19 @@ Responde SOLO con el SQL.
             "validation": {},
             "result_rows": 0
         }
-        
+
         try:
             # Crear cliente para este modelo
             model_client = OpenAI(
                 api_key=openrouter_api_key,
                 base_url="https://openrouter.ai/api/v1"
             )
-            
+
             messages = [
                 {"role": "system", "content": arena_system_prompt},
                 {"role": "user", "content": test["prompt"]}
             ]
-            
+
             # Llamada a la API
             api_start = time.time()
             response = model_client.chat.completions.create(
@@ -709,27 +557,27 @@ Responde SOLO con el SQL.
             )
             latency_api = time.time() - api_start
             ttft = latency_api  # Para llamadas no-streaming, TTFT ≈ latencia total
-            
+
             # Extraer SQL
             sql_generated = response.choices[0].message.content.strip()
-            
+
             # Limpiar markdown si existe
             if "```sql" in sql_generated:
                 sql_generated = sql_generated.split("```sql")[1].split("```")[0].strip()
             elif "```" in sql_generated:
                 sql_generated = sql_generated.split("```")[1].split("```")[0].strip()
-            
+
             result["sql_generated"] = sql_generated
-            
+
             # Tokens
             if response.usage:
                 result["tokens_input"] = response.usage.prompt_tokens
                 result["tokens_output"] = response.usage.completion_tokens
                 result["tokens_total"] = response.usage.total_tokens
-            
+
             # Ejecutar SQL
             df, json_output, error = consulta_sql(sql_generated)
-            
+
             if error:
                 result["error"] = error
                 result["success"] = False
@@ -739,12 +587,12 @@ Responde SOLO con el SQL.
                 result["validation"] = validation
                 result["success"] = validation["success"]
                 result["result_rows"] = len(df)
-            
+
             # Métricas de tiempo
             result["execution_time"] = time.time() - start_time
             result["ttft"] = ttft
             result["latency_api"] = latency_api
-            
+
             # Calcular costo y eficiencia
             result["cost"] = calculate_cost(
                 model_config["name"],
@@ -755,7 +603,7 @@ Responde SOLO con el SQL.
                 result["tokens_total"],
                 result["execution_time"]
             )
-            
+
             # Log metrics
             log_metrics(
                 session_id=session_id,
@@ -772,20 +620,20 @@ Responde SOLO con el SQL.
                 test_id=test["id"],
                 test_level=test["level"]
             )
-            
+
         except Exception as e:
             result["error"] = str(e)
             result["success"] = False
             result["execution_time"] = time.time() - start_time
-        
+
         results.append(result)
         progress_bar.progress((idx + 1) / len(ARENA_MODELS))
         time.sleep(0.3)  # Evitar rate limiting
-    
+
     status_text.text("✅ Test completado!")
     progress_bar.empty()
     status_text.empty()
-    
+
     return results
 
 # --- 8. INTERFAZ DE USUARIO (PESTAÑAS) ---
@@ -803,7 +651,7 @@ with tab1:
     with col_chat:
         # Contenedor para el historial de chat
         chat_container = st.container(height=600)
-        
+
         # Cargar y mostrar historial
         messages = st.session_state.chat_history
         if not messages:
@@ -880,7 +728,7 @@ with tab2:
 # --- Pestaña 3: Arena LLM ---
 with tab3:
     st.header("🏟️ Arena LLM - Comparación de Modelos")
-    
+
     # Verificar API key de OpenRouter
     if not effective_openrouter_key:
         st.warning("⚠️ Se requiere una API key de OpenRouter para usar el Arena. Introdúcela en la barra lateral.")
@@ -888,7 +736,7 @@ with tab3:
     else:
         # Panel de información de modelos
         st.subheader("🤖 Modelos en Competencia")
-        
+
         cols = st.columns(5)
         for idx, (model_key, model_config) in enumerate(ARENA_MODELS.items()):
             with cols[idx]:
@@ -899,55 +747,55 @@ with tab3:
                     <p style='margin: 0; font-size: 12px; color: #666;'>{model_config['description']}</p>
                 </div>
                 """, unsafe_allow_html=True)
-        
+
         st.markdown("---")
-        
+
         # Tabla de precios y recomendaciones
         with st.expander("💰 Ver Tabla de Precios y Análisis de Costos"):
             st.subheader("Comparativa de Precios")
             st.dataframe(PRICING_TABLE, use_container_width=True, hide_index=True)
-            
+
             st.markdown("### 📊 Análisis de Costos por Escenario")
             col1, col2, col3 = st.columns(3)
-            
+
             for idx, scenario in enumerate(COST_ANALYSIS["escenarios"]):
                 with [col1, col2, col3][idx]:
                     st.markdown(f"**{scenario['nombre']}**")
                     st.caption(f"{scenario['consultas']:,} consultas/mes")
                     for model, cost in scenario["costos"].items():
                         st.text(f"{model}: ${cost:.2f}")
-            
+
             st.markdown("### 🎯 Recomendaciones por Caso de Uso")
             rec_col1, rec_col2 = st.columns(2)
-            
+
             rec_list = list(RECOMMENDATIONS.items())
             for idx, (use_case, rec) in enumerate(rec_list):
                 with rec_col1 if idx % 2 == 0 else rec_col2:
                     st.markdown(f"**{use_case.replace('_', ' ').title()}**")
                     st.info(f"✅ {rec['modelo_recomendado']}\n\n{rec['razon']}")
-        
+
         st.markdown("---")
-        
+
         # Selector de tests
         col1, col2 = st.columns([2, 1])
-        
+
         with col1:
             st.subheader("📝 Selecciona un Test")
-            
+
             # Filtro por nivel
             level_filter = st.selectbox(
                 "Nivel de Dificultad",
                 ["Todos", "Nivel 1 - Fácil", "Nivel 2 - Medio", "Nivel 3 - Difícil"],
                 key="arena_level_filter"
             )
-            
+
             # Filtrar tests
             if level_filter == "Todos":
                 filtered_tests = ARENA_TESTS
             else:
                 level_num = int(level_filter.split()[1])
                 filtered_tests = get_tests_by_level(level_num)
-            
+
             # Selector de test
             test_options = {f"{t['id']} - {t['name']}": t for t in filtered_tests}
             selected_test_key = st.selectbox(
@@ -955,13 +803,13 @@ with tab3:
                 list(test_options.keys()),
                 key="arena_test_selector"
             )
-            
+
             if selected_test_key:
                 selected_test = test_options[selected_test_key]
-                
+
                 # Mostrar detalles del test
                 st.info(f"**Pregunta:** {selected_test['prompt']}")
-                
+
                 # Botón para ejecutar
                 if st.button("🚀 Ejecutar Test en los 5 Modelos", type="primary", use_container_width=True):
                     with st.spinner("Ejecutando test en todos los modelos..."):
@@ -969,21 +817,21 @@ with tab3:
                         st.session_state.arena_results = arena_results
                     st.success("✅ Test completado!")
                     st.rerun()
-        
+
         with col2:
             st.subheader("📊 Estadísticas de Tests")
             st.metric("Total de Tests", TEST_STATS['total_tests'])
             st.metric("Nivel 1 (Fácil)", TEST_STATS['level_1'])
             st.metric("Nivel 2 (Medio)", TEST_STATS['level_2'])
             st.metric("Nivel 3 (Difícil)", TEST_STATS['level_3'])
-        
+
         # Mostrar resultados si existen
         if st.session_state.arena_results:
             st.markdown("---")
             st.subheader("📊 Resultados de la Competencia")
-            
+
             results = st.session_state.arena_results
-            
+
             # Crear tabla comparativa
             comparison_data = []
             for r in results:
@@ -998,30 +846,30 @@ with tab3:
                     "📊 Tokens": r['tokens_total'],
                     "📝 Filas": r['result_rows']
                 })
-            
+
             comparison_df = pd.DataFrame(comparison_data)
             st.dataframe(comparison_df, use_container_width=True, hide_index=True)
-            
+
             # Métricas agregadas
             st.markdown("### 🎯 Money Shot - Métricas Clave")
-            
+
             col1, col2, col3, col4 = st.columns(4)
-            
+
             success_rate = sum(1 for r in results if r['success']) / len(results) * 100
             total_cost = sum(r['cost'] for r in results)
             avg_latency = sum(r['latency_api'] for r in results) / len(results)
             avg_efficiency = sum(r['efficiency'] for r in results) / len(results)
-            
+
             col1.metric("Tasa de Éxito", f"{success_rate:.0f}%")
             col2.metric("Costo Total", f"${total_cost:.6f}")
             col3.metric("Latencia Promedio", f"{avg_latency:.3f}s")
             col4.metric("Eficiencia Promedio", f"{avg_efficiency:.0f} tok/s")
-            
+
             # Gráficos comparativos
             st.markdown("### 📈 Visualizaciones Comparativas")
-            
+
             col1, col2 = st.columns(2)
-            
+
             with col1:
                 # Gráfico de éxito por modelo
                 success_by_model = comparison_df.groupby('Modelo')['✅ Éxito'].apply(lambda x: (x == '✅').sum()).reset_index()
@@ -1029,7 +877,7 @@ with tab3:
                 fig_success = px.bar(success_by_model, x='Modelo', y='Éxito', title='Tasa de Éxito por Modelo',
                                     color='Modelo', color_discrete_sequence=px.colors.qualitative.Set2)
                 st.plotly_chart(fig_success, use_container_width=True)
-            
+
             with col2:
                 # Gráfico de costo vs tiempo
                 cost_time_df = pd.DataFrame([{
@@ -1037,15 +885,15 @@ with tab3:
                     'Costo': r['cost'] * 1000000,  # Convertir a costo por millón
                     'Tiempo': r['execution_time']
                 } for r in results])
-                fig_cost_time = px.scatter(cost_time_df, x='Tiempo', y='Costo', 
+                fig_cost_time = px.scatter(cost_time_df, x='Tiempo', y='Costo',
                                           text='Modelo', title='Costo vs Tiempo de Ejecución',
                                           labels={'Costo': 'Costo ($M tokens)', 'Tiempo': 'Tiempo (segundos)'})
                 fig_cost_time.update_traces(textposition='top center')
                 st.plotly_chart(fig_cost_time, use_container_width=True)
-            
+
             # Mostrar SQL generado por cada modelo
             st.markdown("### 🔍 SQL Generado por Modelo")
-            
+
             for r in results:
                 with st.expander(f"{r['model_display']} - {'✅ Éxito' if r['success'] else '❌ Error'}"):
                     st.code(r['sql_generated'], language='sql')
@@ -1053,7 +901,7 @@ with tab3:
                         st.error(f"Error: {r['error']}")
                     if r['validation']:
                         st.json(r['validation'])
-            
+
             # Botón para limpiar resultados
             if st.button("🗑️ Limpiar Resultados"):
                 st.session_state.arena_results = []
@@ -1062,34 +910,34 @@ with tab3:
 # --- Pestaña 4: Resultados del Arena ---
 with tab4:
     st.header("📊 Resultados del LLM Arena")
-    
+
     # Intentar cargar resultados del arena
-    arena_file = "arena_results.json"
-    
-    if os.path.exists(arena_file):
+    arena_file = ARENA_RESULTS_PATH
+
+    if arena_file.exists():
         try:
             with open(arena_file, 'r', encoding='utf-8') as f:
                 arena_data = json.load(f)
-            
+
             # Metadata del arena
             metadata = arena_data.get("metadata", {})
             st.subheader("📋 Información General")
-            
+
             col1, col2, col3, col4 = st.columns(4)
             col1.metric("Tests Ejecutados", metadata.get("total_tests", 0))
             col2.metric("Modelos Comparados", metadata.get("total_models", 0))
             col3.metric("Total Ejecuciones", metadata.get("total_executions", 0))
             col4.metric("Fecha", metadata.get("timestamp", "N/A").split("T")[0] if "timestamp" in metadata else "N/A")
-            
+
             st.markdown("---")
-            
+
             # Resumen por modelo
             st.subheader("🏆 Resumen por Modelo")
-            
+
             # Calcular estadísticas por modelo
             results = arena_data.get("results", [])
             model_stats = {}
-            
+
             for result in results:
                 model_display = result.get("model_display", "Unknown")
                 if model_display not in model_stats:
@@ -1103,26 +951,26 @@ with tab4:
                         "total_tokens": 0,
                         "avg_efficiency": []
                     }
-                
+
                 model_stats[model_display]["total_tests"] += 1
                 if result.get("success"):
                     model_stats[model_display]["successful"] += 1
                 else:
                     model_stats[model_display]["failed"] += 1
-                
+
                 model_stats[model_display]["total_cost"] += result.get("cost", 0)
                 model_stats[model_display]["total_time"] += result.get("execution_time", 0)
                 model_stats[model_display]["total_tokens"] += result.get("tokens_total", 0)
                 if result.get("efficiency"):
                     model_stats[model_display]["avg_efficiency"].append(result.get("efficiency", 0))
-            
+
             # Crear tabla de resumen
             summary_data = []
             for model, stats in model_stats.items():
                 success_rate = (stats["successful"] / stats["total_tests"] * 100) if stats["total_tests"] > 0 else 0
                 avg_time = stats["total_time"] / stats["total_tests"] if stats["total_tests"] > 0 else 0
                 avg_efficiency = sum(stats["avg_efficiency"]) / len(stats["avg_efficiency"]) if stats["avg_efficiency"] else 0
-                
+
                 summary_data.append({
                     "Modelo": model,
                     "Categoría": stats["category"],
@@ -1133,18 +981,18 @@ with tab4:
                     "⏱️ Tiempo Prom": f"{avg_time:.2f}s",
                     "🚀 Eficiencia": f"{avg_efficiency:.0f} tok/s"
                 })
-            
+
             summary_df = pd.DataFrame(summary_data)
             summary_df = summary_df.sort_values(by="✅ Éxitos", ascending=False)
             st.dataframe(summary_df, use_container_width=True, hide_index=True)
-            
+
             st.markdown("---")
-            
+
             # Gráficos de resumen
             st.subheader("📈 Análisis Comparativo")
-            
+
             col1, col2 = st.columns(2)
-            
+
             with col1:
                 # Gráfico de éxito por modelo
                 fig_success = px.bar(
@@ -1157,7 +1005,7 @@ with tab4:
                 )
                 fig_success.update_traces(textposition='outside')
                 st.plotly_chart(fig_success, use_container_width=True)
-            
+
             with col2:
                 # Gráfico de costo vs tasa de éxito
                 cost_success_data = []
@@ -1168,7 +1016,7 @@ with tab4:
                         "Tasa de Éxito (%)": success_rate,
                         "Costo Total ($)": stats["total_cost"]
                     })
-                
+
                 fig_cost_success = px.scatter(
                     cost_success_data,
                     x="Costo Total ($)",
@@ -1180,12 +1028,12 @@ with tab4:
                 fig_cost_success.update_traces(textposition='top center')
                 fig_cost_success.update_layout(showlegend=False)
                 st.plotly_chart(fig_cost_success, use_container_width=True)
-            
+
             st.markdown("---")
-            
+
             # Resultados por test
             st.subheader("🔍 Resultados Detallados por Test")
-            
+
             # Agrupar resultados por test
             tests_dict = {}
             for result in results:
@@ -1197,24 +1045,24 @@ with tab4:
                         "results": []
                     }
                 tests_dict[test_id]["results"].append(result)
-            
+
             # Filtro por nivel
             level_filter = st.selectbox(
                 "Filtrar por Nivel",
                 ["Todos", "Nivel 1 - Fácil", "Nivel 2 - Medio", "Nivel 3 - Difícil"],
                 key="results_level_filter"
             )
-            
+
             # Mostrar cada test
             for test_id, test_data in sorted(tests_dict.items()):
                 test_level = test_data["level"]
-                
+
                 # Aplicar filtro
                 if level_filter != "Todos":
                     filter_level = int(level_filter.split()[1])
                     if test_level != filter_level:
                         continue
-                
+
                 with st.expander(f"**{test_id}** - {test_data['name']} (Nivel {test_level})", expanded=False):
                     # Crear tabla comparativa para este test
                     test_results = []
@@ -1228,50 +1076,50 @@ with tab4:
                             "Tokens": r.get("tokens_total", 0),
                             "Eficiencia": f"{r.get('efficiency', 0):.0f} tok/s"
                         })
-                    
+
                     test_df = pd.DataFrame(test_results)
                     st.dataframe(test_df, use_container_width=True, hide_index=True)
-                    
+
                     # Mostrar SQL generado por cada modelo
                     st.markdown("**💻 SQL Generado:**")
-                    
+
                     for r in test_data["results"]:
-                        model_name = r.get("model_display", "Unknown")
+                        model_name_display = r.get("model_display", "Unknown")
                         success = r.get("success", False)
                         sql = r.get("sql_generated", "No SQL generado")
                         error = r.get("error", None)
-                        
+
                         status_emoji = "✅" if success else "❌"
-                        
-                        with st.expander(f"{status_emoji} {model_name}", expanded=False):
+
+                        with st.expander(f"{status_emoji} {model_name_display}", expanded=False):
                             if sql:
                                 st.code(sql, language="sql")
                             else:
                                 st.warning("No se generó SQL")
-                            
+
                             if error:
                                 st.error(f"**Error:** {error}")
-                            
+
                             if r.get("validation"):
                                 st.json(r["validation"])
-                    
+
                     st.markdown("---")
-            
+
         except Exception as e:
             st.error(f"Error al cargar los resultados del arena: {e}")
-            st.info("Por favor, ejecuta el arena primero usando la pestaña '🏟️ Arena LLM' o el script `arena_runner.py`")
+            st.info("Por favor, ejecuta el arena primero usando la pestaña '🏟️ Arena LLM' o el script `benchmark/runner.py`")
     else:
         st.info(f"📁 No se encontró el archivo `{arena_file}`")
         st.markdown("""
         Para generar resultados del Arena, puedes:
-        
+
         1. **Usar la pestaña '🏟️ Arena LLM'** en esta aplicación para ejecutar tests individuales
         2. **Ejecutar el script completo:**
            ```bash
-           python llm_arena.py --api-key TU_API_KEY --level all
+           python benchmark/runner.py --api-key TU_API_KEY --level all
            ```
-        
-        Los resultados se guardarán automáticamente en `arena_results.json`
+
+        Los resultados se guardarán automáticamente en `data/arena_results.json`
         """)
 
 # --- Pestaña 5: Métricas de Uso ---
@@ -1280,13 +1128,13 @@ with tab5:
 
     # PIN Protection
     pin = st.text_input("Introduce el PIN para ver las métricas", type="password", key="pin_input")
-    
+
     if pin == "2406":
         st.success("PIN correcto. Mostrando métricas.")
-        
+
         # Cargar datos de métricas
         try:
-            metrics_df = pd.read_csv("metrics.csv")
+            metrics_df = pd.read_csv(METRICS_CSV_PATH)
             metrics_df['date'] = pd.to_datetime(metrics_df['date'])
 
             st.markdown("---")
@@ -1298,7 +1146,7 @@ with tab5:
             total_sessions = metrics_df['session_id'].nunique()
             avg_latency = metrics_df['latency_api'].mean()
             avg_execution = metrics_df['execution_time'].mean()
-            
+
             col1.metric("Total de Tokens Procesados", f"{total_tokens:,.0f}")
             col2.metric("Total de Sesiones Únicas", f"{total_sessions}")
             col3.metric("Latencia API Promedio", f"{avg_latency:.2f}s")
@@ -1359,39 +1207,39 @@ with tab5:
                 if 'execution_time' in metrics_df.columns:
                     fig_exec = px.histogram(metrics_df, x='execution_time', nbins=20, title='Distribución de Tiempo de Ejecución (segundos)')
                     st.plotly_chart(fig_exec, use_container_width=True)
-            
+
             # Sección especial para Arena
             if 'test_id' in metrics_df.columns and not metrics_df['test_id'].isna().all():
                 st.markdown("---")
                 st.subheader("🏟️ Métricas del Arena")
-                
+
                 arena_df = metrics_df[metrics_df['test_id'].notna()].copy()
-                
+
                 if not arena_df.empty:
                     col1, col2, col3, col4 = st.columns(4)
-                    
-                    arena_tests = arena_df['test_id'].nunique()
+
+                    arena_tests_count = arena_df['test_id'].nunique()
                     arena_success_rate = arena_df['success'].mean() * 100 if 'success' in arena_df.columns else 0
                     arena_total_cost = arena_df['real_cost'].sum() if 'real_cost' in arena_df.columns else 0
                     arena_avg_efficiency = arena_df['efficiency'].mean() if 'efficiency' in arena_df.columns else 0
-                    
-                    col1.metric("Tests Ejecutados", arena_tests)
+
+                    col1.metric("Tests Ejecutados", arena_tests_count)
                     col2.metric("Tasa de Éxito", f"{arena_success_rate:.1f}%")
                     col3.metric("Costo Total", f"${arena_total_cost:.6f}")
                     col4.metric("Eficiencia Promedio", f"{arena_avg_efficiency:.0f} tok/s")
-                    
+
                     # Gráficos del Arena
                     col1, col2 = st.columns(2)
-                    
+
                     with col1:
                         # Éxito por nivel de test
                         if 'test_level' in arena_df.columns and 'success' in arena_df.columns:
                             success_by_level = arena_df.groupby('test_level')['success'].apply(lambda x: x.sum() / len(x) * 100).reset_index()
                             success_by_level.columns = ['Nivel', 'Tasa de Éxito (%)']
-                            fig_level = px.bar(success_by_level, x='Nivel', y='Tasa de Éxito (%)', 
+                            fig_level = px.bar(success_by_level, x='Nivel', y='Tasa de Éxito (%)',
                                              title='Tasa de Éxito por Nivel de Dificultad')
                             st.plotly_chart(fig_level, use_container_width=True)
-                    
+
                     with col2:
                         # Costo por modelo
                         if 'llm_model' in arena_df.columns and 'real_cost' in arena_df.columns:
@@ -1399,10 +1247,10 @@ with tab5:
                             cost_by_model.columns = ['Modelo', 'Costo Total ($)']
                             # Extraer nombre corto del modelo
                             cost_by_model['Modelo'] = cost_by_model['Modelo'].apply(lambda x: x.split('/')[-1][:15])
-                            fig_cost_model = px.bar(cost_by_model, x='Modelo', y='Costo Total ($)', 
+                            fig_cost_model = px.bar(cost_by_model, x='Modelo', y='Costo Total ($)',
                                                    title='Costo Total por Modelo')
                             st.plotly_chart(fig_cost_model, use_container_width=True)
-                    
+
                     # Gráfico de TTFT vs Latencia Total
                     if 'ttft' in arena_df.columns and 'latency_api' in arena_df.columns:
                         st.markdown("#### ⚡ Time to First Token (TTFT) vs Latencia Total")
@@ -1410,7 +1258,7 @@ with tab5:
                                             title='TTFT vs Latencia Total por Modelo',
                                             labels={'ttft': 'TTFT (s)', 'latency_api': 'Latencia Total (s)'})
                         st.plotly_chart(fig_ttft, use_container_width=True)
-            
+
             # Mostrar datos crudos
             if st.checkbox("Mostrar datos crudos de métricas"):
                 st.dataframe(metrics_df)
@@ -1422,4 +1270,3 @@ with tab5:
 
     elif pin:
         st.error("PIN incorrecto. Por favor, inténtalo de nuevo.")
-

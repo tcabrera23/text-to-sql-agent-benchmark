@@ -2,7 +2,7 @@
 Tabla de Precios de Modelos OpenRouter - Actualizada 2026
 
 Este archivo contiene información detallada sobre los precios y características
-de los modelos disponibles en el Arena LLM.
+de los modelos disponibles en el Arena LLM, usada por la pestaña "Arena LLM" de la app.
 """
 
 import pandas as pd
@@ -200,24 +200,24 @@ def get_recommendation(use_case: str):
 
 def calculate_breakeven(expensive_model: str = "GPT-4o", cheap_model: str = "GPT-OSS-120B"):
     """
-    Calcula el punto de equilibrio: cuántas consultas fallidas justifican 
+    Calcula el punto de equilibrio: cuántas consultas fallidas justifican
     el costo adicional del modelo más caro.
-    
+
     Asume:
     - Costo de re-ejecución de consulta fallida: $0.50
     - Diferencia en tasa de éxito: 5% (asumido)
     """
     pricing = PRICING_TABLE.set_index("Modelo")
-    
+
     cost_expensive = float(pricing.loc[expensive_model, "Costo Típico"].replace("$", ""))
     cost_cheap = float(pricing.loc[cheap_model, "Costo Típico"].replace("$", ""))
-    
+
     cost_diff = cost_expensive - cost_cheap
     reexecution_cost = 0.50  # Costo estimado de re-ejecutar una consulta
     success_diff = 0.05  # Diferencia típica en tasa de éxito
-    
+
     breakeven = cost_diff / (reexecution_cost * success_diff)
-    
+
     return {
         "expensive_model": expensive_model,
         "cheap_model": cheap_model,
@@ -232,7 +232,7 @@ if __name__ == "__main__":
     print("=" * 80)
     print(PRICING_TABLE.to_string(index=False))
     print("\n")
-    
+
     print("=" * 80)
     print("ANÁLISIS DE COSTO POR ESCENARIO")
     print("=" * 80)
@@ -241,7 +241,7 @@ if __name__ == "__main__":
         for model, cost in scenario["costos"].items():
             print(f"  {model:15s}: ${cost:>8.2f}")
     print("\n")
-    
+
     print("=" * 80)
     print("RECOMENDACIONES POR CASO DE USO")
     print("=" * 80)

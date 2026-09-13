@@ -11,10 +11,12 @@ El **LLM Arena** es un sistema de evaluación comparativa para modelos de lengua
 | Categoría | Modelo | Nombre Técnico | Precio Input ($/M tokens) | Precio Output ($/M tokens) | Descripción |
 |-----------|--------|----------------|---------------------------|----------------------------|-------------|
 | **🏋️ Pesado** | GPT-4o | `openai/gpt-4o` | $2.50 | $10.00 | El estándar de oro. "El que no debería fallar". |
-| **💪 Mediano** | DeepSeek-V3-70b | `deepseek/deepseek-v3` | $0.27 | $1.10 | El retador de código (sucesor del popular V2.5). |
-| **⚡ Crossover** | GPT-4o-mini | `openai/gpt-4o-mini` | $0.15 | $0.60 | El modelo "abierto" de OpenAI (estilo OT-preview). |
-| **🚀 Ligero** | Llama-3.3-70b | `meta-llama/llama-3.3-70b-instruct` | $0.59 | $0.79 | El rey de la eficiencia. |
-| **🐭 Mini** | Phi-4-mini-4b | `microsoft/phi-4` | $0.00 | $0.00 | El "underdog" que sorprende por su tamaño. |
+| **💪 Mediano** | GPT-OSS-120B | `openai/gpt-oss-120b` | $0.20 | $0.20 | El retador de los gigantes de la IA. |
+| **⚡ Crossover** | Llama-3.3-70B | `meta-llama/llama-3.3-70b-instruct` | $0.59 | $0.79 | El modelo "abierto" de Meta (estilo OT-preview). |
+| **🚀 Ligero** | Llama-3-8B | `meta-llama/llama-3-8b-instruct` | $0.055 | $0.055 | El rey de la eficiencia. |
+| **🐭 Mini** | Phi-3.5 | `microsoft/phi-3.5-mini-128k-instruct` | $0.00 | $0.00 | El "underdog" que sorprende por su tamaño. |
+
+La fuente única de esta tabla en el código es [`core/models.py`](../core/models.py) (precios en [`core/metrics.py`](../core/metrics.py)).
 
 ### Análisis de Costos Esperados
 
@@ -27,10 +29,10 @@ Para una consulta típica con:
 | Modelo | Costo Estimado |
 |--------|----------------|
 | GPT-4o | $0.00275 |
-| DeepSeek-V3 | $0.000300 |
-| GPT-4o-mini | $0.000165 |
-| Llama-3.3-70b | $0.000413 |
-| Phi-4 | $0.000000 |
+| GPT-OSS-120B | $0.000140 |
+| Llama-3.3-70B | $0.000413 |
+| Llama-3-8B | $0.000039 |
+| Phi-3.5 | $0.000000 |
 
 ## 📝 Sistema de Tests
 
@@ -107,9 +109,9 @@ Para cada ejecución, el Arena trackea:
 
 ### Opción 1: Interfaz Web (Streamlit)
 
-1. Inicia la aplicación:
+1. Inicia la aplicación (desde la raíz del repo):
 ```bash
-streamlit run main.py
+streamlit run app/main.py
 ```
 
 2. Ve a la pestaña **"🏟️ Arena LLM"**
@@ -122,40 +124,40 @@ streamlit run main.py
 
 ### Opción 2: Script Automatizado (CLI)
 
-Para ejecutar tests en lote desde la línea de comandos:
+Para ejecutar tests en lote desde la línea de comandos (desde la raíz del repo):
 
 ```bash
 # Ejecutar todos los tests en todos los modelos
-python arena_runner.py --api-key TU_API_KEY
+python benchmark/runner.py --api-key TU_API_KEY
 
 # Ejecutar solo tests de nivel 1
-python arena_runner.py --api-key TU_API_KEY --level 1
+python benchmark/runner.py --api-key TU_API_KEY --level 1
 
 # Ejecutar tests específicos
-python arena_runner.py --api-key TU_API_KEY --tests L1_T1 L2_T1 L3_T1
+python benchmark/runner.py --api-key TU_API_KEY --tests L1_T1 L2_T1 L3_T1
 
-# Comparar solo algunos modelos
-python arena_runner.py --api-key TU_API_KEY --models pesado ligero mini
+# Comparar solo algunos modelos (claves válidas: heavyweight, medium, crossover, lightweight, mini)
+python benchmark/runner.py --api-key TU_API_KEY --models heavyweight lightweight mini
 
 # Guardar resultados en archivo personalizado
-python arena_runner.py --api-key TU_API_KEY --output mis_resultados.json
+python benchmark/runner.py --api-key TU_API_KEY --output data/mis_resultados.json
 ```
 
 ### Ejemplos de Uso Avanzado
 
 **Benchmark completo de nivel 2:**
 ```bash
-python arena_runner.py --api-key TU_API_KEY --level 2 --output benchmark_medio.json
+python benchmark/runner.py --api-key TU_API_KEY --level 2 --output data/benchmark_medio.json
 ```
 
 **Comparar solo modelos pequeños:**
 ```bash
-python arena_runner.py --api-key TU_API_KEY --models ligero mini --output small_models.json
+python benchmark/runner.py --api-key TU_API_KEY --models lightweight mini --output data/small_models.json
 ```
 
 **Tests difíciles solo en el modelo pesado:**
 ```bash
-python arena_runner.py --api-key TU_API_KEY --level 3 --models pesado --output gpt4o_hard.json
+python benchmark/runner.py --api-key TU_API_KEY --level 3 --models heavyweight --output data/gpt4o_hard.json
 ```
 
 ## 📈 Análisis de Resultados
@@ -165,7 +167,7 @@ python arena_runner.py --api-key TU_API_KEY --level 3 --models pesado --output g
 La pestaña Arena muestra:
 
 1. **Tabla Comparativa:** Todos los modelos lado a lado con métricas clave
-2. **Money Shot KPIs:** 
+2. **Money Shot KPIs:**
    - Tasa de éxito global
    - Costo total
    - Latencia promedio
@@ -191,25 +193,25 @@ Después de ejecutar tests, la pestaña **"📈 Métricas"** mostrará:
 
 **Producción de Alto Volumen:**
 - Priorizar: **Costo** y **Eficiencia**
-- Modelos recomendados: Phi-4, Llama-3.3, DeepSeek-V3
+- Modelos recomendados: Phi-3.5, Llama-3-8B
 
 **Aplicaciones Críticas:**
 - Priorizar: **Éxito** y **Precisión**
-- Modelos recomendados: GPT-4o, GPT-4o-mini
+- Modelos recomendados: GPT-4o, GPT-OSS-120B
 
 **Prototipado Rápido:**
 - Priorizar: **Velocidad** (TTFT)
-- Modelos recomendados: GPT-4o-mini, Phi-4
+- Modelos recomendados: Phi-3.5, Llama-3-8B
 
 **Balance Precio-Calidad:**
 - Buscar: **Éxito > 80%** con **Costo mínimo**
-- Modelos candidatos: DeepSeek-V3, Llama-3.3
+- Modelos candidatos: GPT-OSS-120B, Llama-3.3-70B
 
 ## 🔧 Personalización
 
 ### Agregar Nuevos Tests
 
-Edita `arena_tests.py`:
+Edita [`benchmark/catalog.py`](catalog.py):
 
 ```python
 {
@@ -227,7 +229,7 @@ Edita `arena_tests.py`:
 
 ### Agregar Nuevos Modelos
 
-Edita `main.py` y `arena_runner.py`:
+Edita [`core/models.py`](../core/models.py) (fuente única, usada tanto por la app como por el CLI):
 
 ```python
 ARENA_MODELS["nuevo"] = {
@@ -239,23 +241,23 @@ ARENA_MODELS["nuevo"] = {
 }
 ```
 
-Y actualiza precios en `metrics.py`:
+Y actualiza precios en [`core/metrics.py`](../core/metrics.py):
 
 ```python
 MODEL_PRICING["proveedor/modelo-nombre"] = {
-    "input": 0.00, 
+    "input": 0.00,
     "output": 0.00
 }
 ```
 
 ## 📦 Archivos del Sistema
 
-- `main.py` - Aplicación principal con interfaz Streamlit
-- `arena_tests.py` - Definición de tests y validaciones
-- `arena_runner.py` - Script CLI para ejecución automatizada
-- `metrics.py` - Sistema de métricas y logging
-- `metrics.csv` - Almacenamiento de métricas (generado automáticamente)
-- `arena_results.json` - Resultados de arena_runner (generado por CLI)
+- `app/main.py` - Aplicación principal con interfaz Streamlit
+- `benchmark/catalog.py` - Definición de tests y validaciones
+- `benchmark/runner.py` - Script CLI para ejecución automatizada
+- `core/metrics.py` - Sistema de métricas y logging
+- `data/metrics.csv` - Almacenamiento de métricas (generado automáticamente)
+- `data/arena_results.json` - Resultados de `benchmark/runner.py` (generado por CLI)
 
 ## 🐛 Troubleshooting
 
@@ -271,14 +273,14 @@ MODEL_PRICING["proveedor/modelo-nombre"] = {
 - Revisa el SQL generado en los detalles del test
 
 **Costos mayores a los esperados**
-- Verifica precios actualizados en `metrics.py`
+- Verifica precios actualizados en `core/metrics.py`
 - Los precios de OpenRouter pueden cambiar
 
 ## 🤝 Contribuciones
 
 Para agregar más tests o mejorar el sistema:
 
-1. Analiza el schema de `chinook.db`
+1. Analiza el schema de `data/chinook.db` (o [`core/schema.py`](../core/schema.py))
 2. Crea tests con `expected_sql_keywords` apropiados
 3. Define `validation_rules` claras
 4. Prueba en múltiples modelos
